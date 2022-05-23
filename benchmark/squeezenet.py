@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from common import *
+from common import report_header, benchmark
 
 class Fire(nn.Module):
     def __init__(self, inplanes: int, squeeze_planes: int, expand1x1_planes: int, expand3x3_planes: int) -> None:
@@ -53,7 +53,6 @@ class SqueezeNet(nn.Module):
                 if m.bias is not None:
                     init.constant_(m.bias, 0)
 
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.features(x)
         x = self.classifier(x)
@@ -63,6 +62,7 @@ def squeezenet():
     net = SqueezeNet()
     net.eval()
     input = torch.ones(1, 3, 64, 64, requires_grad=False)
+
     def run(count):
         for _ in range(count):
             net.forward(input)
