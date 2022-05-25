@@ -44,3 +44,8 @@
 - aten::zeros_like
 - aten::empty
 - aten::empty.out
+- aten::cat
+- aten::cat.out
+- aten::stack
+- aten::stack.out
+ß
