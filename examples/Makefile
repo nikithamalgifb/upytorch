@@ -5,7 +5,7 @@ LDFLAGS = -L.
 hello-embed: hello-embed.o -lmicropython
 
 -lmicropython:
-	$(MAKE) -f $(MPTOP)/examples/embedding/Makefile.upylib MPTOP=$(MPTOP)
+	$(MAKE) -f ./Makefile.upylib MPTOP=$(MPTOP)
 
 clean:
 	rm -rf *.o *.a build
