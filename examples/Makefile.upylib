@@ -125,11 +125,11 @@ LDFLAGS_MOD += $(LIBFFI_LDFLAGS_MOD)
 SRC_MOD += modffi.c
 endif
 
-MAIN_C = main.c
+
+ADN_UTILITY = ../examples/utility-micropython.c
 
 # source files
 SRC_C = $(addprefix ports/unix/,\
-	$(MAIN_C) \
 	gccollect.c \
 	unix_mphal.c \
 	input.c \
@@ -141,6 +141,8 @@ SRC_C = $(addprefix ports/unix/,\
 	fatfs_port.c \
 	$(SRC_MOD) \
 	)
+
+SRC_C += $(ADN_UTILITY)
 
 LIB_SRC_C = $(addprefix lib/,\
 	$(LIB_SRC_C_EXTRA) \
