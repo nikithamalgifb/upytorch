@@ -9,4 +9,4 @@ hello-embed: hello-embed.o interpreterManager.o -lmicropython
 	$(MAKE) -f ./Makefile.upylib MPTOP=$(MPTOP)
 
 clean:
-	rm -rf *.o *.a build hello-embed
+	rm -rf *.o *.a build hello-embed examples

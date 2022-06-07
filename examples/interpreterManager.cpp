@@ -1,5 +1,6 @@
 #include "interpreterManager.h"
 
+
 Interpreter::Interpreter(int nInterp){
     char heap[16384];
     // Initialized stack limit
@@ -8,5 +9,4 @@ Interpreter::Interpreter(int nInterp){
     gc_init(heap, heap + sizeof(heap));
     // Initialize interpreter
     mp_init();
-
 }
