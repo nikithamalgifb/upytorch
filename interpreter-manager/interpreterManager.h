@@ -8,7 +8,6 @@ This file defines the class for the interpreter manager class.
 
 //Micropython Modules are in C
 extern "C" {
-    #pragma once
     #include "py/compile.h"
     #include "py/runtime.h"
     #include "py/gc.h"
