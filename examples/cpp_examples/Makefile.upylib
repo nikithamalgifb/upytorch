@@ -126,7 +126,7 @@ SRC_MOD += modffi.c
 endif
 
 
-ADN_UTILITY = ../examples/utility-micropython.c
+ADN_UTILITY = ../../lib/utility-micropython.c
 
 # source files
 SRC_C = $(addprefix ports/unix/,\

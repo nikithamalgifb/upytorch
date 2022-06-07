@@ -23,19 +23,15 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "interpreterManager.h"
 
-
-extern "C" {
-    #include "py/compile.h"
-    #include "py/runtime.h"
-    #include "py/gc.h"
-    #include "py/stackctrl.h"
-}
-
+#include "py/compile.h"
+#include "py/runtime.h"
+#include "py/gc.h"
+#include "py/stackctrl.h"
 
 static char heap[16384];
 
@@ -55,10 +51,7 @@ mp_obj_t execute_from_str(const char *str) {
     }
 }
 
-extern int main() {
-
-    Interpreter m(1);
-
+int main() {
     // Initialized stack limit
     mp_stack_set_limit(40000 * (BYTES_PER_WORD / 4));
     // Initialize heap
@@ -70,5 +63,13 @@ extern int main() {
     if (execute_from_str(str)) {
         printf("Error\n");
     }
+}
 
+uint mp_import_stat(const char *path) {
+    return MP_IMPORT_STAT_NO_EXIST;
+}
+
+void nlr_jump_fail(void *val) {
+    printf("FATAL: uncaught NLR %p\n", val);
+    exit(1);
 }

@@ -25,6 +25,7 @@
 #include "genhdr/mpversion.h"
 #include "input.h"
 
+
 #if !MICROPY_VFS
 uint mp_import_stat(const char *path) {
     struct stat st;
@@ -37,6 +38,7 @@ uint mp_import_stat(const char *path) {
     }
     return MP_IMPORT_STAT_NO_EXIST;
 }
+
 
 #if MICROPY_PY_IO
 // Factory function for I/O stream classes, only needed if generic VFS subsystem isn't used.
@@ -56,6 +58,7 @@ mp_obj_t mp_builtin_open(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kwar
 MP_DEFINE_CONST_FUN_OBJ_KW(mp_builtin_open_obj, 1, mp_builtin_open);
 #endif
 #endif
+
 
 void nlr_jump_fail(void *val) {
     fprintf(stderr, "FATAL: uncaught NLR %p\n", val);

@@ -1,7 +1,5 @@
 /*
-
 This file defines the class for the interpreter manager class.
-
 */
 #include <string.h>
 #include <stdio.h>
@@ -16,6 +14,7 @@ extern "C" {
     #include "py/gc.h"
     #include "py/stackctrl.h"
 }
+
 
 class Interpreter {
     public:
