@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <string>
 
 using std::cout; using std::cerr;
 using std::endl; using std::string;
@@ -42,13 +43,17 @@ mp_obj_t execute_from_str(const char *str) {
 int main() {
 
     Interpreter m;
+    std::string cmd;
+    for(;;) {
+        std::cout << ">>> ";
 
-    //string str = readFileIntoString("./test.txt");
-    const char str2[] = "import sysprint(sys.__loader__)";
-    if (execute_from_str(str2)) {
-        std::cout << "Error\n";
-        return -1;
+        std::cin >> cmd;
+        if (execute_from_str(cmd.c_str())) {
+             std::cout << "Error\n";
+        }
     }
+    //string str = readFileIntoString("./test.txt");
+
 
     return 0;
 }
