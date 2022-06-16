@@ -6,17 +6,14 @@ CPPFLAGS = -std=c++14 -I. -I$(MPTOP) -I$(ITOP) -DNO_QSTR -lstdc++ -I../wrapper -
 LDFLAGS = -L.
 CXX = g++
 
-main: main.o interpreterManager.o libwrapper.a -lmicropython
-	$(CXX) $(CPPFLAGS) main.o interpreterManager.o ../wrapper/libwrapper.a -o main
+main: main.o interpreterManager.o
+	$(CXX) $(CPPFLAGS) main.o interpreterManager.o ../wrapper/libwrapper.a upytorch.a -o main
 
 main.o: main.cpp
 	$(CXX) $(CPPFLAGS) -c main.cpp
 
 interpreterManager.o: $(ITOP)/interpreterManager.cpp $(ITOP)/interpreterManager.h
 	$(CXX) $(CPPFLAGS) -c $(ITOP)/interpreterManager.cpp
-
-libwrapper.a:
-	$(MAKE) -C ..
 
 -lmicropython:
 	$(MAKE) -f ./Makefile.upylib MPTOP=$(MPTOP)
