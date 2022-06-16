@@ -49,7 +49,7 @@ int main() {
 
         std::cin >> cmd;
         if (execute_from_str(cmd.c_str())) {
-             std::cout << "Error\n";
+             std::cout << "Error\n" << std::endl;
         }
     }
     //string str = readFileIntoString("./test.txt");
