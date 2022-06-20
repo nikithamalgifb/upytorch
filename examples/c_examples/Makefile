@@ -1,4 +1,4 @@
-MPTOP = ../micropython
+MPTOP = ../../micropython
 CFLAGS = -std=c99 -I. -I$(MPTOP) -DNO_QSTR
 LDFLAGS = -L.
 
