@@ -15,7 +15,7 @@ cd "$ROOT"
 ARGS=()
 ARGS+=(--native_functions pytorch/aten/src/ATen/native/native_functions.yaml)
 ARGS+=(--deprecated pytorch/tools/autograd/deprecated.yaml)
-ARGS+=(--codegen_root tools)
+ARGS+=(--template_dir_path tools/templates)
 ARGS+=(--out "$OUT")
 if [ "${BUILD_LITE:-}" == '1' ]; then
   ARGS+=(--inference_only)
