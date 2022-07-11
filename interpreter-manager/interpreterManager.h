@@ -18,6 +18,6 @@ extern "C" {
 
 class Interpreter {
     public:
-        Interpreter(int nInterps);
+        Interpreter();
         ~Interpreter() {};
 };

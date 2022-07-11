@@ -1,11 +1,17 @@
-/*
-This file is an example embedding for the Interpreter Manager class
-*/
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "interpreterManager.h"
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
 
+using std::cout; using std::cerr;
+using std::endl; using std::string;
+using std::ifstream; using std::ostringstream;
+
+
+#include "interpreterManager.h"
 
 extern "C" {
     #include "py/compile.h"
@@ -30,8 +36,15 @@ extern "C" {
 
 }
 
-static char heap[16384];
-
+string readFileIntoString(const string& path) {
+    ifstream input_file(path);
+    if (!input_file.is_open()) {
+        cerr << "Could not open the file - '"
+             << path << "'" << endl;
+        exit(EXIT_FAILURE);
+    }
+    return string((std::istreambuf_iterator<char>(input_file)), std::istreambuf_iterator<char>());
+}
 
 mp_obj_t execute_from_str(const char *str) {
     nlr_buf_t nlr;
@@ -52,20 +65,19 @@ mp_obj_t execute_from_str(const char *str) {
 
 int main() {
 
-    __main();
+    Interpreter m;
+    std::string cmd;
+    // for(;;) {
+    //     std::cout << ">>> ";
 
-    // // Initialized stack limit
-    // mp_stack_set_limit(40000 * (BYTES_PER_WORD / 4));
-    // // Initialize heap
-    // gc_init(heap, heap + sizeof(heap));
-    // // Initialize interpreter
-    // mp_init();
-
-    const char str[] = "import sys\nprint(sys.modules)";
-    if (execute_from_str(str)) {
-        printf("Error\n");
-        return -1;
+    //     std::cin >> cmd;
+    //     if (execute_from_str(cmd.c_str())) {
+    //          std::cout << "Error\n" << std::endl;
+    //     }
+    // }
+    string str = readFileIntoString("./test.txt");
+    if (execute_from_str(str.c_str())) {
+        std::cout << "Error\n" << std::endl;
     }
-
     return 0;
 }

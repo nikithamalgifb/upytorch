@@ -91,7 +91,7 @@ const mp_print_t mp_stderr_print = {NULL, stderr_print_strn};
 #define PATHLIST_SEP_CHAR ':'
 #endif
 
-int main_();
+int main_1();
 
 int __main() {
     #if MICROPY_PY_THREAD
@@ -103,10 +103,10 @@ int __main() {
     // this function. main_() itself may have other functions inlined (with
     // their own stack variables), that's why we need this main/main_ split.
     mp_stack_ctrl_init();
-    return main_();
+    return main_1();
 }
 
-MP_NOINLINE int main_() {
+MP_NOINLINE int main_1() {
     #ifdef SIGPIPE
     // Do not raise SIGPIPE, instead return EPIPE. Otherwise, e.g. writing
     // to peer-closed socket will lead to sudden termination of MicroPython
