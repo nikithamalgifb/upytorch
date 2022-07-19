@@ -1,28 +1,42 @@
+# (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
+
 import argparse
 import os
-import yaml
+import sys
 
 from collections import defaultdict
 from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 
-from tools.codegen.code_template import CodeTemplate
-import tools.codegen.api.cpp as cpp
-from tools.codegen.api.python import (
-    PythonSignatureNativeFunctionPair, PythonSignatureGroup, PythonSignature,
-    PythonOutArgument, DispatchLambdaArgumentExprs, TENSOR_OPTIONS_FIELDS,
-    dispatch_lambda_args, dispatch_lambda_return_str,
-    cpp_dispatch_exprs,
-    arg_parser_output_exprs,
-    has_tensor_options,
-)
-
-from tools.codegen.model import NativeFunction, BaseOperatorName, Variant
-
-from tools.codegen.context import with_native_function
-from tools.codegen.gen import cpp_string, FileManager
+import torchgen.api.cpp as cpp
+import yaml
 from tools.autograd.gen_python_functions import (
-    is_noarg, load_signatures, group_overloads,
+    group_overloads,
+    is_noarg,
+    load_signatures,
+    should_generate_py_binding,
 )
+
+from torchgen.api.python import (
+    arg_parser_output_exprs,
+    cpp_dispatch_exprs,
+    dispatch_lambda_args,
+    dispatch_lambda_return_str,
+    DispatchLambdaArgumentExprs,
+    has_tensor_options,
+    PythonOutArgument,
+    PythonSignature,
+    PythonSignatureGroup,
+    PythonSignatureNativeFunctionPair,
+    TENSOR_OPTIONS_FIELDS,
+)
+
+from torchgen.code_template import CodeTemplate
+
+from torchgen.context import with_native_function
+from torchgen.gen import cpp_string, parse_native_yaml
+
+from torchgen.model import BaseOperatorName, NativeFunction, Variant
+from torchgen.utils import FileManager
 
 try:
     # use faster C loader if available
@@ -30,59 +44,75 @@ try:
 except ImportError:
     from yaml import Loader  # type: ignore
 
-parser = argparse.ArgumentParser(
-    description='Generate MicroPython Torch binding files script')
-parser.add_argument('--native_functions',
-                    help='path to native_functions.yaml')
-parser.add_argument('--deprecated',
-                    help='path to deprecated.yaml')
-parser.add_argument('--codegen_root',
-                    help='path to codegen root directory')
-parser.add_argument('--inference_only', action='store_true',
-                    help='inference only build mode')
-parser.add_argument('--op_selection_yaml',
-                    help='path to operator selection config')
-parser.add_argument('--out',
-                    help='path to output directory')
-args = parser.parse_args()
+
+TAGS_PATH = "aten/src/ATen/native/tags.yaml"
+TAGS_PATH_FULL = "/home/qihan/fbsource/fbcode/caffe2/aten/src/ATen/native/tags.yaml"
+
 
 def gen(
     native_yaml_path: str,
     deprecated_yaml_path: str,
-    codegen_root_path: str,
+    template_dir_path: str,
     selector: Optional[Set[str]],
     output_path: str,
 ) -> None:
     fm = FileManager(
         install_dir=output_path,
-        template_dir=os.path.join(codegen_root_path, 'templates'),
-        dry_run=False)
+        template_dir=template_dir_path,
+        dry_run=False,
+    )
 
     def is_selected(pair: PythonSignatureNativeFunctionPair) -> bool:
         # TODO: should move this to pytorch codegen
-        return selector is None or f'aten::{pair.function.func.name}' in selector
 
-    methods = list(filter(is_selected,
-                   load_signatures(native_yaml_path, deprecated_yaml_path, method=True)))
-    create_upy_bindings(
-        fm, methods,
-        lambda f: Variant.method in f.variants,  # ignore python_module
-        'torch', 'upt_variable_methods.cpp', method=True)
-    create_upy_bindings(
-        fm, methods,
-        lambda f: Variant.method in f.variants,  # ignore python_module
-        'torch', 'upt_variable_methods.h', method=True)
+        return selector is None or f"aten::{pair.function.func.name}" in selector
 
-    functions = list(filter(is_selected,
-                     load_signatures(native_yaml_path, deprecated_yaml_path, method=False)))
+    native_functions = parse_native_yaml(
+        native_yaml_path, TAGS_PATH_FULL
+    ).native_functions
+    native_functions = list(filter(should_generate_py_binding, native_functions))
+    methods = load_signatures(native_functions, deprecated_yaml_path, method=True)
+    methods = list(filter(is_selected, methods))
     create_upy_bindings(
-        fm, functions,
-        lambda f: Variant.function in f.variants,  # ignore python_module
-        'torch', 'upt_torch_functions.cpp', method=False)
+        fm,
+        methods,
+        lambda f: Variant.method in f.variants,  # ignore python_module
+        "torch",
+        "upt_variable_methods.cpp",
+        method=True,
+    )
     create_upy_bindings(
-        fm, functions,
+        fm,
+        methods,
+        lambda f: Variant.method in f.variants,  # ignore python_module
+        "torch",
+        "upt_variable_methods.h",
+        method=True,
+    )
+
+    functions = list(
+        filter(
+            is_selected,
+            load_signatures(native_functions, deprecated_yaml_path, method=False),
+        )
+    )
+    create_upy_bindings(
+        fm,
+        functions,
         lambda f: Variant.function in f.variants,  # ignore python_module
-        'torch', 'upt_torch_functions.h', method=False)
+        "torch",
+        "upt_torch_functions.cpp",
+        method=False,
+    )
+    create_upy_bindings(
+        fm,
+        functions,
+        lambda f: Variant.function in f.variants,  # ignore python_module
+        "torch",
+        "upt_torch_functions.h",
+        method=False,
+    )
+
 
 def create_upy_bindings(
     fm: FileManager,
@@ -96,7 +126,9 @@ def create_upy_bindings(
     py_forwards: List[str] = []
     py_methods: List[str] = []
 
-    grouped: Dict[BaseOperatorName, List[PythonSignatureNativeFunctionPair]] = defaultdict(list)
+    grouped: Dict[
+        BaseOperatorName, List[PythonSignatureNativeFunctionPair]
+    ] = defaultdict(list)
     for pair in pairs:
         if pred(pair.function):
             grouped[pair.function.func.name.name].append(pair)
@@ -106,14 +138,20 @@ def create_upy_bindings(
         py_forwards.extend(forward_decls(name, overloads, method=method))
         py_methods.append(method_impl(name, module, overloads, method=method))
 
-    fm.write_with_template(filename, filename, lambda: {
-        'generated_comment': '@' + f'generated from {fm.template_dir}/{filename}',
-        'py_forwards': py_forwards,
-        'py_methods': py_methods,
-    })
+    fm.write_with_template(
+        filename,
+        filename,
+        lambda: {
+            "generated_comment": "@" + f"generated from {fm.template_dir}/{filename}",
+            "py_forwards": py_forwards,
+            "py_methods": py_methods,
+        },
+    )
+
 
 def get_upt_name(name: BaseOperatorName, method: bool) -> str:
     return f'UPTVariable_{"method_" if method else ""}{name}'
+
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 #
@@ -121,23 +159,32 @@ def get_upt_name(name: BaseOperatorName, method: bool) -> str:
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
+
 def forward_decls(
     name: BaseOperatorName,
     overloads: Sequence[PythonSignatureNativeFunctionPair],
     *,
-    method: bool
+    method: bool,
 ) -> Tuple[str, ...]:
     if is_noarg(overloads):
-        return (f"""\
+        return (
+            f"""\
 ARGS_ONLY({name}, 0) \\
-""",)
+""",
+        )
     else:
-        min_args = min(map(
-            lambda o: sum(a.default is None for a in o.signature.input_args),
-            overloads))
-        return (f"""\
+        min_args = min(
+            map(
+                lambda o: sum(a.default is None for a in o.signature.input_args),
+                overloads,
+            )
+        )
+        return (
+            f"""\
 WITH_KWARGS({name}, {min_args}) \\
-""",)
+""",
+        )
+
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 #
@@ -146,7 +193,8 @@ WITH_KWARGS({name}, {min_args}) \\
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
 # python binding for all overloads of a particular function/method
-PY_VARIABLE_METHOD_VARARGS = CodeTemplate(r"""\
+PY_VARIABLE_METHOD_VARARGS = CodeTemplate(
+    r"""\
 // ${name}
 mp_obj_t ${uptname}(size_t n_args, const mp_obj_t* args, mp_map_t* kw_args) {
   ${method_header}
@@ -161,19 +209,23 @@ mp_obj_t ${uptname}(size_t n_args, const mp_obj_t* args, mp_map_t* kw_args) {
   ${method_footer}
 }
 
-""")
+"""
+)
 
 # handler for a single parsed signature - may be a single overload or
 # a pair of overloads that whose signatures only differ in output params
 # (plugged into PY_VARIABLE_METHOD_VARARGS as an item in ${dispatch})
-PY_VARIABLE_CASE = CodeTemplate("""\
+PY_VARIABLE_CASE = CodeTemplate(
+    """\
 case ${overload_index}: {
   ${body}
 }
-""")
+"""
+)
 
 # python binding for single-overload function/method
-PY_VARIABLE_METHOD_VARARGS_SINGLETON = CodeTemplate("""\
+PY_VARIABLE_METHOD_VARARGS_SINGLETON = CodeTemplate(
+    """\
 // ${name}
 mp_obj_t ${uptname}(size_t n_args, const mp_obj_t* args, mp_map_t* kw_args) {
   ${method_header}
@@ -186,10 +238,12 @@ mp_obj_t ${uptname}(size_t n_args, const mp_obj_t* args, mp_map_t* kw_args) {
   ${method_footer}
 }
 
-""")
+"""
+)
 
 # python binding for a method with no args, shortcuts parsing
-PY_VARIABLE_METHOD_NOARGS = CodeTemplate("""\
+PY_VARIABLE_METHOD_NOARGS = CodeTemplate(
+    """\
 // ${name}
 mp_obj_t ${uptname}(size_t n_args, const mp_obj_t* args, mp_map_t* kw_args) {
   ${method_header}
@@ -197,27 +251,35 @@ mp_obj_t ${uptname}(size_t n_args, const mp_obj_t* args, mp_map_t* kw_args) {
   ${method_footer}
 }
 
-""")
+"""
+)
+
 
 def method_impl(
     name: BaseOperatorName,
     module: Optional[str],
     overloads: Sequence[PythonSignatureNativeFunctionPair],
     *,
-    method: bool
+    method: bool,
 ) -> str:
     uptname = get_upt_name(name, method)
     noarg = is_noarg(overloads)
 
     method_header: List[str] = [
-        'HANDLE_TH_ERRORS',
+        "HANDLE_TH_ERRORS",
     ]
-    method_header += [
-        'Tensor& self = unpackTensor(*args++);',
-        '--n_args;',
-    ] if method else []
+    method_header += (
+        [
+            "Tensor& self = unpackTensor(*args++);",
+            "--n_args;",
+        ]
+        if method
+        else []
+    )
 
-    method_footer = ([] if noarg else ['return mp_const_none;']) + ['END_HANDLE_TH_ERRORS']
+    method_footer = ([] if noarg else ["return mp_const_none;"]) + [
+        "END_HANDLE_TH_ERRORS"
+    ]
 
     grouped_overloads: Sequence[PythonSignatureGroup] = group_overloads(overloads)
     is_singleton = len(grouped_overloads) == 1
@@ -225,11 +287,15 @@ def method_impl(
     dispatch: List[str] = []
     for overload_index, overload in enumerate(grouped_overloads):
         signature = overload.signature.signature_str()
-        signatures.append(f'{cpp_string(str(signature))},')
+        signatures.append(f"{cpp_string(str(signature))},")
         dispatch_body = emit_dispatch_case(overload)
         dispatch.append(
-            PY_VARIABLE_CASE.substitute(overload_index=overload_index, body=dispatch_body)
-            if not is_singleton else dispatch_body)
+            PY_VARIABLE_CASE.substitute(
+                overload_index=overload_index, body=dispatch_body
+            )
+            if not is_singleton
+            else dispatch_body
+        )
 
     if noarg:
         template = PY_VARIABLE_METHOD_NOARGS
@@ -246,17 +312,21 @@ def method_impl(
         signatures=signatures,
         dispatch=dispatch,
         method_footer=method_footer,
-        self_='*args' if method else 'nullptr',
+        self_="*args" if method else "nullptr",
     )
 
+
 # handler for output/no-output overload pair
-PY_VARIABLE_OUT = CodeTemplate("""\
+PY_VARIABLE_OUT = CodeTemplate(
+    """\
 if (_r.isNone(${out_idx})) {
   ${call_dispatch}
 } else {
   ${call_dispatch_out}
 }
-""")
+"""
+)
+
 
 def emit_dispatch_case(
     overload: PythonSignatureGroup,
@@ -271,50 +341,55 @@ def emit_dispatch_case(
         # dispatch output and no-output variants, branch on _r.isNone(<out_idx>)
         return PY_VARIABLE_OUT.substitute(
             out_idx=overload.signature.output_idx(),
-            call_dispatch=emit_single_dispatch(
-                overload.signature, overload.base),
+            call_dispatch=emit_single_dispatch(overload.signature, overload.base),
             call_dispatch_out=emit_single_dispatch(
-                overload.signature, overload.outplace),
+                overload.signature, overload.outplace
+            ),
         )
     else:
         # no-output version only
-        return emit_single_dispatch(
-            overload.signature, overload.base)
+        return emit_single_dispatch(overload.signature, overload.base)
 
-def emit_single_dispatch(
-    ps: PythonSignature, f: NativeFunction
-) -> str:
+
+def emit_single_dispatch(ps: PythonSignature, f: NativeFunction) -> str:
     """
     Emit dispatch code for a single native function.
     """
+
     @with_native_function
     def go(f: NativeFunction) -> str:
         # header comments
-        deprecated = '[deprecated] ' if ps.deprecated else ''
-        schema_comment = f'// {deprecated}aten::{f.func}'
+        deprecated = "[deprecated] " if ps.deprecated else ""
+        schema_comment = f"// {deprecated}aten::{f.func}"
 
         # dispatch lambda signature
         name = cpp.name(f.func)
-        lambda_formals = ', '.join(map(lambda a: f"{a.type_str} {a.name}",
-                                       dispatch_lambda_args(ps, f)))
+        lambda_formals = ", ".join(
+            map(lambda a: f"{a.type_str} {a.name}", dispatch_lambda_args(ps, f))
+        )
         lambda_return = dispatch_lambda_return_str(f)
 
         # dispatch lambda body
         dispatch_callee = cpp_dispatch_target(f)
-        dispatch_args = ', '.join(cpp_dispatch_exprs(f, python_signature=ps))
+        dispatch_args = ", ".join(cpp_dispatch_exprs(f, python_signature=ps))
 
         # from arg parser outputs to dispatch lambda arguments
         parser_outputs = arg_parser_output_exprs(ps, f)
         lambda_arg_exprs = dispatch_lambda_exprs(ps, f)
-        inits = '\n'.join(lambda_arg_exprs.inits)
-        lambda_args = ', '.join(lambda_arg_exprs.exprs)
+        inits = "\n".join(lambda_arg_exprs.inits)
+        lambda_args = ", ".join(lambda_arg_exprs.exprs)
 
-        need_set_requires_grad = ps.tensor_options_args and (not has_tensor_options(f) or (
-            ps.method and ('requires_grad' in parser_outputs)))
-        set_requires_grad = f'.set_requires_grad({parser_outputs["requires_grad"].expr})' \
-            if need_set_requires_grad else ''
+        need_set_requires_grad = ps.tensor_options_args and (
+            not has_tensor_options(f)
+            or (ps.method and ("requires_grad" in parser_outputs))
+        )
+        set_requires_grad = (
+            f'.set_requires_grad({parser_outputs["requires_grad"].expr})'
+            if need_set_requires_grad
+            else ""
+        )
 
-        if lambda_return == 'void':
+        if lambda_return == "void":
             return f"""\
 {schema_comment}
 {inits}
@@ -337,18 +412,20 @@ return wrap(dispatch_{name}({lambda_args}){set_requires_grad});
 
     return go(f)
 
+
 # Dispatch factory method call to 'at::' instead of 'torch::' for inference only build.
 def cpp_dispatch_target(f: NativeFunction) -> str:
     name = cpp.name(f.func)
     if Variant.method in f.variants:
-        return f'self.{name}'
+        return f"self.{name}"
     if Variant.function in f.variants:
-        if has_tensor_options(f) or f.func.name.name.base.endswith('_like'):
-            namespace = 'at' if args.inference_only else 'torch'
+        if has_tensor_options(f) or f.func.name.name.base.endswith("_like"):
+            namespace = "torch"
         else:
-            namespace = 'at'
-        return f'{namespace}::{name}'
-    raise RuntimeError(f'could not dispatch, neither function nor method: {f.func}')
+            namespace = "at"
+        return f"{namespace}::{name}"
+    raise RuntimeError(f"could not dispatch, neither function nor method: {f.func}")
+
 
 # HACK - temporary clone to bypass unsupported cases
 def dispatch_lambda_exprs(
@@ -369,24 +446,34 @@ def dispatch_lambda_exprs(
         name = a.name
         arg_parser_expr = arg_parser_outputs[a.name].expr
 
-        if has_toptions and name == 'self':
+        if has_toptions and name == "self":
             # TODO: why this needs to be special case?
-            inits.extend([
-                f'auto self = {arg_parser_expr};',
-            ])
+            inits.extend(
+                [
+                    f"auto self = {arg_parser_expr};",
+                ]
+            )
             lambda_args_exprs[name] = name
-        elif isinstance(a, PythonOutArgument) and len(a.outputs) > 1 and f.func.is_out_fn():
-            inits.extend([
-                f'auto out = {arg_parser_expr};',
-            ])
+        elif (
+            isinstance(a, PythonOutArgument)
+            and len(a.outputs) > 1
+            and f.func.is_out_fn()
+        ):
+            inits.extend(
+                [
+                    f"auto out = {arg_parser_expr};",
+                ]
+            )
             for i, out_arg in enumerate(a.outputs):
-                lambda_args_exprs[out_arg.name] = f'out[{i}]'
-        elif str(a.type) == 'Dimname[]?':
-            inits.extend([
-                f'auto __{name} = {arg_parser_expr};',
-                f'c10::optional<DimnameList> {name} = \
-__{name} ? c10::make_optional(DimnameList(__{name}.value())) : c10::nullopt;',
-            ])
+                lambda_args_exprs[out_arg.name] = f"out[{i}]"
+        elif str(a.type) == "Dimname[]?":
+            inits.extend(
+                [
+                    f"auto __{name} = {arg_parser_expr};",
+                    f"c10::optional<DimnameList> {name} = \
+__{name} ? c10::make_optional(DimnameList(__{name}.value())) : c10::nullopt;",
+                ]
+            )
             lambda_args_exprs[name] = name
         else:
             # default case - directly using PythonArgParser output expr
@@ -394,25 +481,31 @@ __{name} ? c10::make_optional(DimnameList(__{name}.value())) : c10::nullopt;',
 
     # method's self is passed directly to python binding, rather than parsed
     if ps.method:
-        lambda_args_exprs['self'] = 'self'
+        lambda_args_exprs["self"] = "self"
 
     # 2. special packing/checking for TensorOptions.
     tensor_options_args_names = list(map(lambda a: a.name, ps.tensor_options_args))
     if has_toptions:
         if f.func.is_out_fn():
-            raise RuntimeError(f'{f.func}: tensor options with output arg')
+            raise RuntimeError(f"{f.func}: tensor options with output arg")
         for a in ps.tensor_options_args:
             if a.name not in TENSOR_OPTIONS_FIELDS:
                 raise RuntimeError(
-                    f'{f.func}: unrecognized tensor options field \'{a.name}\' in python binding arguments')
+                    f"{f.func}: unrecognized tensor options field '{a.name}' in python binding arguments"
+                )
             if str(a.type) != TENSOR_OPTIONS_FIELDS.get(a.name):
                 raise RuntimeError(
-                    f'{f.func}: unrecognized type \'{str(a.type)}\' for tensor options field \'{a.name}\'')
-        if not all(map(lambda a: a in tensor_options_args_names, TENSOR_OPTIONS_FIELDS.keys())):
+                    f"{f.func}: unrecognized type '{str(a.type)}' for tensor options field '{a.name}'"
+                )
+        if not all(
+            map(lambda a: a in tensor_options_args_names, TENSOR_OPTIONS_FIELDS.keys())
+        ):
             raise RuntimeError(
-                f'{f.func}: incomplete tensor options args: {tensor_options_args_names}')
+                f"{f.func}: incomplete tensor options args: {tensor_options_args_names}"
+            )
 
-        inits.append(f'''\
+        inits.append(
+            f"""\
 const auto options = TensorOptions()
     .dtype({arg_parser_outputs['dtype'].expr})
     //.device({arg_parser_outputs['device'].expr})
@@ -420,20 +513,41 @@ const auto options = TensorOptions()
     .requires_grad({arg_parser_outputs['requires_grad'].expr})
     .pinned_memory({arg_parser_outputs['pin_memory'].expr});
 // torch::utils::maybe_initialize_cuda(options);
-''')
-        lambda_args_exprs['options'] = 'options'
+"""
+        )
+        lambda_args_exprs["options"] = "options"
 
     return DispatchLambdaArgumentExprs(
         exprs=tuple(map(lambda a: lambda_args_exprs[a.name], lambda_args)),
         inits=inits,
     )
 
+
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate MicroPython Torch binding files script"
+    )
+    parser.add_argument("--native_functions", help="path to native_functions.yaml")
+    parser.add_argument("--deprecated", help="path to deprecated.yaml")
+    parser.add_argument("--template_dir_path", help="path to codegen root directory")
+    parser.add_argument(
+        "--inference_only", action="store_true", help="inference only build mode"
+    )
+    parser.add_argument("--op_selection_yaml", help="path to operator selection config")
+    parser.add_argument("--out", help="path to output directory")
+    args = parser.parse_args()
     selected_ops: Optional[Set[str]] = None
     if args.op_selection_yaml is not None:
-        with open(args.op_selection_yaml, 'r') as f:
+        with open(args.op_selection_yaml, "r") as f:
             selected_ops = set(yaml.load(f, Loader=Loader) or [])
-    gen(args.native_functions, args.deprecated, args.codegen_root, selected_ops, args.out)
+    gen(
+        args.native_functions,
+        args.deprecated,
+        args.template_dir_path,
+        selected_ops,
+        args.out,
+    )
+
 
 if __name__ == "__main__":
     main()

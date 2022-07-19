@@ -599,7 +599,7 @@ bool FunctionSignature::parse(mp_obj_t self, size_t n_args, const mp_obj_t* args
     } else if (kwargs) {
       auto elem = mp_map_lookup(
           kwargs,
-          MP_OBJ_NEW_QSTR(QSTR_FROM_STR_STATIC(param.name.c_str())),  // TODO: is this efficient?
+          MP_OBJ_NEW_QSTR(qstr_from_str(param.name.c_str())),  // TODO: is this efficient?
           MP_MAP_LOOKUP);
       if (elem) {
         obj = elem->value;

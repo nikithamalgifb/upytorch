@@ -59,7 +59,7 @@ CPPFLAGS = \
 	-Os \
 	-fPIC \
 	-ffunction-sections -fdata-sections -fvisibility=hidden -fvisibility-inlines-hidden \
-	-Wall -Werror \
+	-Wall -Werror -Wno-error=missing-field-initializers \
 	-I $(UPY_DIR) \
 	-I $(UPY_DIR)/py \
 	-I wrapper \
@@ -116,7 +116,7 @@ ifneq ($(UNAME), Darwin)
 UPYFLAGS += MICROPY_USE_READLINE=0
 endif
 
-CFLAGS_EXTRA = -Os -DMODULE_TORCH_ENABLED=1
+CFLAGS_EXTRA = -Os -DMODULE_TORCH_ENABLED=1 -Wno-error=missing-field-initializers
 
 ifneq ($(BUILD_ESP), 1)
 CFLAGS_EXTRA += -DMICROPY_MODULE_BUILTIN_INIT=1
