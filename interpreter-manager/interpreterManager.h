@@ -1,6 +1,7 @@
 /*
 This file defines the class for the interpreter manager class.
 */
+#pragma once
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
